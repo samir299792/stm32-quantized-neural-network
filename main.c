@@ -112,7 +112,7 @@ int main(void) {
             // We'll use an int16_t because we are multplying a Qm.n by a number that requires 6 bits
             // to encode, so the intermediate value is Qm+6.n which is larger than 8 bits!
             int16_t result = ((int16_t)qresult * 100) / QNN_SCALE_FACTOR;
-
+            
             // Display the Qm.n inputs and result using signed integer format (printf() float support is not enabled!)
             printf("in[0]: %d, in[1]: %d, result: %d\n", ch0, ch1, result);
 
