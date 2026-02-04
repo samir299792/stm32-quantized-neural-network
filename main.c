@@ -17,10 +17,22 @@ int __io_putchar(int data) {
   return data;
 }
 
+// initializing the events variable as instructed to keep count.
+// made it volatile because it can be changed in inetrrupt
+volatile uint16_t systick_events = 0;
+//this just tells main() if a tick happened. 
+volatile bool systick_flag = false;
+
 // Callback function for systick exceptions registered in systick_init()
 // Toggle the onboard green LED and start an ADC conversion
 void systick_callback_function(void) {
-    led_toggle(LED_USER);
+    systick_events++;    // increment when an systick event happens
+    systick_flag = true; // to let main() know that systick happened, flag is set to false in main()
+    // Toggle LED every 5 ticks 
+    // systick runs at 10 Hz so LED should toggle at 2 Hz and blink at 1 Hz.
+    if ((systick_events % 5) == 0) {
+        led_toggle(LED_USER);
+    }
 }
 
 // Callback function and global flag for USART receive data events,
@@ -59,11 +71,16 @@ int main(void) {
     __asm("cpsie i");
 
     // Banner
-    printf("Lab 4: Quantized NN - press any key:\n");
+    printf("Lab 4: Quantized NN - continuous sampling (SysTick)\n");
 
     while( 1 ) {
-        if( keypressed ) {
-           
+
+        // Every time a SysTick exception occurs, systick_events is increased by 1
+        // inside the SysTick callback function.  We will not wait for keypress
+        if( systick_flag) {
+
+            systick_flag = false;   // clear flag 
+
             // Sample the analog signal on Port A Pin 0, returns a "raw counts" value
             // in the range 0-4095 based on an input voltage in the range 0 - 3.3 V
             adc_convert(ADC_CH0, &ch0);
@@ -91,8 +108,8 @@ int main(void) {
             // If the maximum ch0 value is 4095, and we did (ch0/4095) as integer division
             // we would get 1 if ch0 = 4095, or 0 if ch0 < 4095 (because it is integer division)
             // Instead we scale _up_ first, then divide, leaving us with a Q3.4 result!
-            ch0 = (ch0 * 16)/4095; // force multiplication first, then division!
-            ch1 = (ch1 * 16)/4095;
+            ch0 = (ch0 * 16) / 4095;
+            ch1 = (ch1 * 16) / 4095;
 
             // Now cast these at int8_t - we can discard the extra bits because we've just 
             // normalized the Qm.n in int8_t to represent the value 0.0 -> 1.0
@@ -101,23 +118,18 @@ int main(void) {
 
             // Predict! (and toggle GPIO around the prediction call so we can time the
             // execution time of the quantized NN_qpredict() function)
-            gpio_pin_set(GPIOA, gpio_pin_3); 
+            gpio_pin_set(GPIOA, gpio_pin_3);
             qresult = NN_qpredict(qinputs);
             gpio_pin_reset(GPIOA, gpio_pin_3);
 
-            // Instead of presenting the results in the dequantized range 0-1, which would
-            // require floating point, we will present the results "* 100" so we can use
-            // integer arithmetic to dequantize to the scaled up result and so we do not 
-            // need the code bloat associated with supporting floating point numbers in printf()
-            // We'll use an int16_t because we are multplying a Qm.n by a number that requires 6 bits
-            // to encode, so the intermediate value is Qm+6.n which is larger than 8 bits!
+            // Dequantize the NN output into a scaled integer result (*100)
+            // using integer arithmetic only 
             int16_t result = ((int16_t)qresult * 100) / QNN_SCALE_FACTOR;
-            
-            // Display the Qm.n inputs and result using signed integer format (printf() float support is not enabled!)
-            printf("in[0]: %d, in[1]: %d, result: %d\n", ch0, ch1, result);
 
-            // Clear the 'keypressed' flag
-            keypressed = false;
+            // Display the inputs and result with the systick count
+            printf("count: %u, in[0]: %d, in[1]: %d, result: %d\n", systick_events, ch0, ch1, result);
+
         }
     }
+
 }
