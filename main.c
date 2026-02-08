@@ -26,13 +26,18 @@ volatile bool systick_flag = false;
 // Callback function for systick exceptions registered in systick_init()
 // Toggle the onboard green LED and start an ADC conversion
 void systick_callback_function(void) {
+    gpio_pin_set(GPIOA, gpio_pin_3);
     systick_events++;    // increment when an systick event happens
-    systick_flag = true; // to let main() know that systick happened, flag is set to false in main()
+    
+
     // Toggle LED every 5 ticks 
     // systick runs at 10 Hz so LED should toggle at 2 Hz and blink at 1 Hz.
     if ((systick_events % 5) == 0) {
         led_toggle(LED_USER);
     }
+    // Start ADC sampling every 100 ms
+    adc_convert(ADC_CH0);
+    gpio_pin_reset(GPIOA, gpio_pin_3);
 }
 
 // Callback function and global flag for USART receive data events,
@@ -42,11 +47,37 @@ void usart2_rx_callback_function(uint8_t rx_data) {
     keypressed = true;
 }
 
+// Callback function for ADC end of conversion events
+// If the converted channel is channel 0, save the results 
+// and start a conversion on channel 1.  If the conversion
+// is channel 1, save the results and signal main() to 
+// perform a prediction.
+static uint16_t ch0; // results of last channel 0 conversion
+static uint16_t ch1; // results of last channel 1 conversion
+static volatile bool run_prediction = false; // flag for main()
+void adc_callback_function(ADC_CHANNEL_t channel, uint16_t data) {
+    gpio_pin_set(GPIOA, gpio_pin_4);
+    switch(channel) {
+        case ADC_CH0:
+            ch0 = data;
+            adc_convert(ADC_CH1);
+            break;
+        case ADC_CH1:
+            ch1 = data;
+            run_prediction = true;
+            break;
+        default:
+            // Shouldn't ever happen!
+    }
+    gpio_pin_reset(GPIOA, gpio_pin_4);
+}
+
+
 int main(void) {
     // Variables to hold the unsigned 12-bit raw conversion values
     // from the analog to digital converter (channels 0 and 1)
-    uint16_t ch0;
-    uint16_t ch1;
+    // uint16_t ch0;
+    // uint16_t ch1;
     // Qm.n inputs passed to NN_qpredict()
     int8_t qinputs[NN_INPUTS];
     // Qm.n result returned from NN_qpredict()
@@ -65,7 +96,7 @@ int main(void) {
     usart2_init(usart2_rx_callback_function);
 
     // Enable the ADC
-    adc_init();
+    adc_init(adc_callback_function);
 
     // Enable exception/interrupt handling in the processor core:
     __asm("cpsie i");
@@ -75,19 +106,10 @@ int main(void) {
 
     while( 1 ) {
 
-        // Every time a SysTick exception occurs, systick_events is increased by 1
-        // inside the SysTick callback function.  We will not wait for keypress
-        if( systick_flag) {
+        // we want to call nn_predict only when run_prediction is true.
+        if( run_prediction) {
 
-            systick_flag = false;   // clear flag 
-
-            // Sample the analog signal on Port A Pin 0, returns a "raw counts" value
-            // in the range 0-4095 based on an input voltage in the range 0 - 3.3 V
-            adc_convert(ADC_CH0, &ch0);
-
-            // Repeat for the analog signal on Port A Pin 1:
-            adc_convert(ADC_CH1, &ch1);
-
+            run_prediction = false;   // clear the flag immediately 
             // We want to scale the 12-bit ADC inputs, range 0-4095, into 
             // an appropriately scaled int8_t inputs to the quantized NN
             // using the quantization scalar QNN_SCALE_FACTOR from the programming assignment
@@ -118,9 +140,7 @@ int main(void) {
 
             // Predict! (and toggle GPIO around the prediction call so we can time the
             // execution time of the quantized NN_qpredict() function)
-            gpio_pin_set(GPIOA, gpio_pin_3);
             qresult = NN_qpredict(qinputs);
-            gpio_pin_reset(GPIOA, gpio_pin_3);
 
             // Dequantize the NN output into a scaled integer result (*100)
             // using integer arithmetic only 
