@@ -26,15 +26,16 @@ static void clock_init(void) {
 // other periperals (e.g. USART, Timer, ADC) are managed in 
 // their respective *_init() functions
 static void rcc_gpio_init(void) {
-    // TODO: comment
+
+    // Enabling clock to GPIO Port A and Port B peripherals
     RCC->AHBENR |= RCC_AHBENR_IOPA_EN;
     RCC->AHBENR |= RCC_AHBENR_IOPB_EN;
 
-    // TODO: comment 
+    //  Configure PA3 and PA4 as general-purpose output pins
     GPIOA->MODER.moder3 = gpio_mode_output;
     GPIOA->MODER.moder4 = gpio_mode_output;
 
-    // TODO: comment
+    // Configure PB3 as a general-purpose output pin
     GPIOB->MODER.moder3 = gpio_mode_output;
 }
 
@@ -46,7 +47,7 @@ static void rcc_usart2_init(void) {
     RCC->APB1RSTR |= RCC_APB1RSTR_USART2_RST;
     RCC->APB1RSTR &= ~RCC_APB1RSTR_USART2_RST;
 
-    // TODO: comment the following
+    // Enable GPIOA clock (required for configuring PA2 and PA15)
     RCC->AHBENR |= RCC_AHBENR_IOPA_EN;
     GPIOA->MODER.moder2 = gpio_mode_alternate_function;  // USART TX
     GPIOA->AFRL.afsel2 = 1; // USART2 alternate function TX
@@ -66,9 +67,11 @@ static void rcc_adc_init(void) {
     RCC->CR2 |= RCC_CR2_HSI14_ENABLE;
     while( !(RCC->CR2 & RCC_CR2_HSI14_RDY) );
 
-    // TODO: comment the following
+    // Enable GPIOA clock to configure ADC input pin
     RCC->AHBENR |= RCC_AHBENR_IOPA_EN;
+    // Configure PA0 as analog mode 
     GPIOA->MODER.moder0 = gpio_mode_analog;
+    // Configure PA1 as analog mode (ADC_IN1)
     GPIOA->MODER.moder1 = gpio_mode_analog;
 }
 
