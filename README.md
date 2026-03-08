@@ -18,3 +18,6 @@ The project also demonstrates several important embedded firmware concepts:
 ## System Architecture
 
 The firmware is structured around **interrupt-driven execution** instead of polling to maximize CPU efficiency.
+
+
+Acknowldgement- This project was done under the instruction of prof. Jason in ENGS 62 at Thayer School of Engineering, Dartmouth College.
